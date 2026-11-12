@@ -1,0 +1,124 @@
+<?xml version='1.0' encoding='UTF-8'?>
+
+<!DOCTYPE properties SYSTEM 'http://java.sun.com/dtd/properties.dtd'>
+
+<!--
+    conf/traccar.xml pour Traccar 6.17 + couche Lexus, converti depuis la
+    configuration 3.2 du serveur S1.
+
+    A completer avant usage :
+      - les identifiants des deux bases ([UTILISATEUR] / [MOT DE PASSE]) ;
+      - le bloc des ports, a recopier tel quel depuis l'ancien fichier.
+
+    NE PAS utiliser l'ancien traccar.xml avec le nouveau jar : Traccar 6
+    creerait ses propres tables dans la base gts.
+-->
+<properties>
+
+    <!-- SERVER CONFIG -->
+
+    <entry key='web.port'>8082</entry>
+    <entry key='web.address'>0.0.0.0</entry>
+    <!-- le dossier doit exister, meme vide, sinon le serveur ne demarre pas :
+         sudo mkdir -p /home/app/traccar/web -->
+    <entry key='web.path'>/home/app/traccar/web</entry>
+    <entry key='web.override'>/home/app/traccar/override</entry>
+
+    <entry key='logger.level'>info</entry>
+    <entry key='logger.file'>/home/app/traccar/logs/tracker-server.log</entry>
+
+    <!-- Le type google demande une cle (geocoder.key) que l'ancienne
+         configuration n'avait pas. Sans cle, laisser desactive : :address reste vide. -->
+    <entry key='geocoder.enable'>false</entry>
+
+    <!-- BASE PROPRE A TRACCAR : nouvelle, separee de gts.
+         CREATE DATABASE traccar CHARACTER SET utf8mb4;
+         Traccar y cree ses tables tout seul au premier demarrage. -->
+
+    <entry key='database.driver'>com.mysql.cj.jdbc.Driver</entry>
+    <entry key='database.url'>jdbc:mysql://localhost:3306/traccar?zeroDateTimeBehavior=round&amp;serverTimezone=UTC&amp;allowPublicKeyRetrieval=true&amp;useSSL=false&amp;allowMultiQueries=true&amp;autoReconnect=true&amp;useUnicode=yes&amp;characterEncoding=UTF-8&amp;sessionVariables=sql_mode=''</entry>
+    <entry key='database.user'>[UTILISATEUR]</entry>
+    <entry key='database.password'>[MOT DE PASSE]</entry>
+
+    <!-- un boitier est accepte au premier contact si son identifiant est numerique -->
+    <entry key='database.registerUnknown'>true</entry>
+    <entry key='database.registerUnknown.regex'>\d{5,20}</entry>
+
+    <!-- COUCHE LEXUS -->
+
+    <entry key='lexus.enable'>true</entry>
+
+    <!-- vide : l'ancien selectDevicesAll etait "imeiNumber AS id", sans prefixe -->
+    <entry key='lexus.deviceIdPrefix'></entry>
+
+    <!-- base OpenGTS : ancien database.url / user / password -->
+    <entry key='lexus.database.driver'>com.mysql.cj.jdbc.Driver</entry>
+    <entry key='lexus.database.url'>jdbc:mysql://localhost:3306/gts?allowMultiQueries=true&amp;useSSL=false&amp;allowPublicKeyRetrieval=true</entry>
+    <entry key='lexus.database.user'>[UTILISATEUR]</entry>
+    <entry key='lexus.database.password'>[MOT DE PASSE]</entry>
+
+    <!-- ancien database.insertPosition, inchange -->
+    <entry key='lexus.insertPosition'>
+        SET SQL_SAFE_UPDATES = 0;
+        START TRANSACTION;
+        SELECT @distance = 0;
+        SELECT @newOdometer = 0;
+        SELECT @newAttributes = '';
+
+        SELECT @fixedTime = 0;
+
+        set @lastStatus = 0;
+
+        SELECT @accountID := accountID, @deviceID := deviceID, @notes := notes,@odometer := lastOdometerKM, @previousTime := lastGPSTimestamp,@lastFuelLevel := lastFuelLevel,
+        @lastFuelLevel2 := lastFuelLevel2, @lastFuelTotal := lastFuelTotal  FROM Device WHERE imeiNumber = :device_id;
+        call gts.fix_time(:time,@fixedTime); call gts.check_imei_device(:device_id,@deviceID);
+        call gts.imei_check(:device_id,:attributes,@deviceID,1);
+        CALL gts.getDistance(:attributes, @distance);
+        call gts.getOdometer(@deviceID, @accountID,UNIX_TIMESTAMP(@fixedTime),@distance,@odometer,@newOdometer,:attributes, @newAttributes);
+        call gts.setLastValues(@lastFuelLevel, @lastFuelLevel2,@lastFuelTotal,@newAttributes, @notes);
+        UPDATE Device SET lastValidLatitude = :latitude, lastValidLongitude = :longitude, lastOdometerKM = @newOdometer, lastDistanceKM = @distance,
+        lastGPSTimestamp = UNIX_TIMESTAMP(@fixedTime), lastUpdateTime = UNIX_TIMESTAMP(NOW()), notes = @notes,lastFuelLevel = @lastFuelLevel,
+        lastFuelLevel2 = @lastFuelLevel2, lastFuelTotal = @lastFuelTotal   WHERE imeiNumber = :device_id;
+
+        call gts.updateLastStatusReturn(:device_id,:statusignition,@lastStatus);
+
+        INSERT INTO EventData (accountID, deviceID, timestamp, statusCode, latitude, longitude, speedKPH, heading, altitude, rawData, distanceKM, odometerKM, creationTime, address,gpsAge)
+        VALUES (@accountID, @deviceID, UNIX_TIMESTAMP(@fixedTime), 0, :latitude, :longitude, :speed,
+        :course, :altitude, @newAttributes, @distance, @newOdometer, UNIX_TIMESTAMP(NOW()), :address, @lastStatus);
+        COMMIT;
+    </entry>
+
+    <!-- socket de l'application mobile : ws://serveur:8082/api/lexus/socket -->
+    <entry key='lexus.socket.enable'>true</entry>
+    <entry key='lexus.selectSocketDevice'>
+        SELECT d.imeiNumber AS id, d.imeiNumber AS uniqueId
+        FROM Device d
+        INNER JOIN Account a ON a.accountID = d.accountID
+        LEFT JOIN User u ON u.accountID = d.accountID AND u.userID = :user
+        WHERE d.accountID = :account AND d.deviceID = :device AND d.imeiNumber REGEXP '^[0-9]+$'
+        AND (u.password = :password OR ((:user = '' OR :user = 'admin') AND a.password = :password))
+        LIMIT 1;
+    </entry>
+
+    <!-- notifications : memes cles qu'avant -->
+    <entry key='notification-folder'>/home/events/</entry>
+    <entry key='notification.url'>http://127.0.0.1/notification/alarms.php?data=</entry>
+    <entry key='notification.coban.url'>http://127.0.0.1/notification/alarms.coban.php?data=</entry>
+    <entry key='notification.enable'>true</entry>
+    <entry key='notification.log'>false</entry>
+    <entry key='notification.enableCMD'>false</entry>
+    <entry key='notification.CMD'>/usr/bin/php7.3 /home/www/lexus-gts/web/notification/alarms.php</entry>
+
+    <!-- PROTOCOL CONFIG
+         Recopier ici, tel quel, le bloc des ports de l'ancien fichier
+         (de gps103.port a t800x.port). Trois protocoles n'existent plus en
+         6.17 et seront simplement ignores : huabao, telik, autofon45. -->
+
+    <entry key='gps103.port'>5001</entry>
+    <entry key='gt06.port'>5023</entry>
+    <entry key='teltonika.port'>5027</entry>
+    <entry key='wialon.port'>5039</entry>
+    <entry key='ruptela.port'>5046</entry>
+    <entry key='osmand.port'>5055</entry>
+
+</properties>

@@ -180,7 +180,9 @@ public class LexusService {
             values.put("altitude", position.getAltitude());
             values.put("speed", position.getSpeed()); // knots, as before
             values.put("course", position.getCourse());
-            values.put("address", position.getAddress());
+            // never NULL: the gts procedures build dynamic SQL with CONCAT, and a NULL
+            // argument turns the whole statement into NULL ("syntax error near 'NULL'")
+            values.put("address", position.getAddress() != null ? position.getAddress() : "");
             values.put("statusignition", view.statusIgnition());
             values.put("attributes", config.getBoolean("lexus.database.xml") ? xml : json);
             values.put("extended_info", xml);
