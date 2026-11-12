@@ -41,9 +41,17 @@ scp -q -i ~/.ssh/id_deploy -P "$PORT" "$RELEASE" "$USER_NAME@$IP:/tmp/traccar-re
 "${SSH[@]}" "DIR='$DIR' bash -s" <<'REMOTE'
 set -euo pipefail
 
-if ! java -version 2>&1 | grep -Eq 'version "(2[1-9]|[3-9][0-9])'; then
-    echo "Java 21 ou plus recent introuvable sur ce serveur : deploiement annule, rien n'a ete modifie."
-    java -version 2>&1 | head -1 || true
+# Le Java controle est celui du service traccar (ExecStart), pas celui du
+# systeme : un autre Java peut rester par defaut pour Tomcat.
+JAVA_BIN=$(systemctl show traccar -p ExecStart --value 2>/dev/null \
+    | grep -o 'path=[^ ;]*' | head -1 | cut -d= -f2 || true)
+case "$JAVA_BIN" in
+    */java) ;;
+    *) JAVA_BIN=java ;;
+esac
+if ! "$JAVA_BIN" -version 2>&1 | grep -Eq 'version "(2[1-9]|[3-9][0-9])'; then
+    echo "Le service traccar n'utilise pas Java 21 ou plus recent ($JAVA_BIN) : deploiement annule, rien n'a ete modifie."
+    "$JAVA_BIN" -version 2>&1 | head -1 || true
     rm -f /tmp/traccar-release.tar.gz
     exit 1
 fi
