@@ -1,0 +1,88 @@
+# Traccar 6 + couche Lexus : construction et deploiement.
+#
+# - a chaque push sur main : construction seule, rien n'est deploye ;
+# - deploiement : a la main, un serveur a la fois
+#     Actions > Lexus > Run workflow > choisir le serveur.
+#
+# Secrets du depot (Settings > Secrets and variables > Actions) :
+#   SSH_PRIVATE_KEY                      cle privee encodee en base64
+#   SERVER_<n>_IP / _PORT / _USER        pour n = 1, 2, 5, 6
+#
+# Avant le premier deploiement sur un serveur : Java 21, la nouvelle
+# configuration (setup/lexus.xml) et la base propre a Traccar doivent etre
+# en place. Le script refuse de deployer si Java 21 n'est pas trouve.
+
+name: Lexus
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      server:
+        description: Serveur a deployer
+        required: true
+        type: choice
+        options: [ s1, s2, s5, s6 ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Traccar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      - run: ./gradlew assemble --no-daemon --console=plain
+      # le jar seul ne suffit plus : il lui faut lib/, schema/ et templates/
+      - run: tar -czf target/traccar-release.tar.gz -C target tracker-server.jar lib -C .. schema templates
+      - uses: actions/upload-artifact@v7
+        with:
+          name: traccar-release
+          path: target/traccar-release.tar.gz
+          retention-days: 7
+
+  deploy:
+    name: Deploy ${{ inputs.server }}
+    if: github.event_name == 'workflow_dispatch'
+    needs: build
+    runs-on: ubuntu-latest
+    environment: production
+    # jamais deux deploiements en meme temps
+    concurrency: lexus-deploy
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: traccar-release
+          path: target
+      - name: Deploy
+        env:
+          SERVER: ${{ inputs.server }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_1_IP: ${{ secrets.SERVER_1_IP }}
+          SERVER_1_PORT: ${{ secrets.SERVER_1_PORT }}
+          SERVER_1_USER: ${{ secrets.SERVER_1_USER }}
+          SERVER_2_IP: ${{ secrets.SERVER_2_IP }}
+          SERVER_2_PORT: ${{ secrets.SERVER_2_PORT }}
+          SERVER_2_USER: ${{ secrets.SERVER_2_USER }}
+          SERVER_5_IP: ${{ secrets.SERVER_5_IP }}
+          SERVER_5_PORT: ${{ secrets.SERVER_5_PORT }}
+          SERVER_5_USER: ${{ secrets.SERVER_5_USER }}
+          SERVER_6_IP: ${{ secrets.SERVER_6_IP }}
+          SERVER_6_PORT: ${{ secrets.SERVER_6_PORT }}
+          SERVER_6_USER: ${{ secrets.SERVER_6_USER }}
+        run: |
+          case "$SERVER" in
+            s1) bash tools/lexus-deploy.sh 1 /home/app/traccar ;;
+            s2) bash tools/lexus-deploy.sh 2 /opt/traccar ;;
+            s5) bash tools/lexus-deploy.sh 5 /home/app/traccar ;;
+            s6) bash tools/lexus-deploy.sh 6 /home/app/traccar ;;
+            *) echo "Serveur inconnu : $SERVER"; exit 1 ;;
+          esac

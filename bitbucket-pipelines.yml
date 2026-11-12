@@ -21,8 +21,8 @@ definitions:
           - gradle
         script:
           - ./gradlew assemble --no-daemon --console=plain
-          # le jar seul ne suffit plus : il lui faut lib/ et schema/
-          - tar -czf target/traccar-release.tar.gz -C target tracker-server.jar lib -C .. schema
+          # le jar seul ne suffit plus : il lui faut lib/, schema/ et templates/
+          - tar -czf target/traccar-release.tar.gz -C target tracker-server.jar lib -C .. schema templates
         artifacts:
           - target/traccar-release.tar.gz
 

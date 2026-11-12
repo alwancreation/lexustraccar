@@ -23,7 +23,8 @@ USER_NAME="${!user_var:?variable $user_var manquante}"
 [ -f "$RELEASE" ] || { echo "$RELEASE introuvable : l'etape de construction n'a pas tourne"; exit 1; }
 
 if ! command -v ssh >/dev/null 2>&1; then
-    apt-get update -qq && apt-get install -y -qq openssh-client >/dev/null
+    SUDO=""; [ "$(id -u)" -eq 0 ] || SUDO="sudo"
+    $SUDO apt-get update -qq && $SUDO apt-get install -y -qq openssh-client >/dev/null
 fi
 
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -51,9 +52,9 @@ STAMP=$(date +%F-%H-%M)
 BACKUP="$DIR/backups/traccar-$STAMP.tar.gz"
 sudo mkdir -p "$DIR/backups"
 
-# sauvegarde de ce qui va etre remplace (jar, lib, schema s'ils existent)
+# sauvegarde de ce qui va etre remplace (jar, lib, schema, templates s'ils existent)
 EXISTING=()
-for item in tracker-server.jar lib schema; do
+for item in tracker-server.jar lib schema templates; do
     [ -e "$DIR/$item" ] && EXISTING+=("$item")
 done
 if [ ${#EXISTING[@]} -gt 0 ]; then
@@ -62,7 +63,7 @@ if [ ${#EXISTING[@]} -gt 0 ]; then
 fi
 
 install_release() {
-    sudo rm -rf "$DIR/lib" "$DIR/schema"
+    sudo rm -rf "$DIR/lib" "$DIR/schema" "$DIR/templates"
     sudo tar -xzf "$1" -C "$DIR"
 }
 
