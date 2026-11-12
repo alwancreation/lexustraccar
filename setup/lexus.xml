@@ -51,6 +51,14 @@
         [PASTE THE OLD database.insertPosition HERE]
     </entry>
 
+    <!-- devices known to OpenGTS, first column = legacy device id (same value as :device_id).
+         Like the 3.2 fork, positions of other trackers are kept by Traccar but never sent
+         to insertPosition. Reloaded every lexus.selectDevices.refresh seconds (default 60).
+         Remove the entry to send every device. -->
+    <entry key='lexus.selectDevices'>
+        SELECT imeiNumber FROM Device WHERE imeiNumber IS NOT NULL AND imeiNumber != ''
+    </entry>
+
     <!-- live socket for the mobile application: ws://server:8082/api/lexus/socket
          (old database.selectSocketDevice; it must return the IMEI in a column named uniqueId) -->
     <entry key='lexus.socket.enable'>true</entry>

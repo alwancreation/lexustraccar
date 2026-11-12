@@ -151,6 +151,22 @@ public class LexusDatabase {
         }
     }
 
+    /** First column of every row, as text; null values are skipped. */
+    public List<String> selectColumn(String key, Map<String, Object> values) throws SQLException {
+        List<String> result = new ArrayList<>();
+        try (Connection connection = dataSource.getConnection();
+                PreparedStatement statement = prepare(connection, key, values);
+                ResultSet resultSet = statement.executeQuery()) {
+            while (resultSet.next()) {
+                String value = resultSet.getString(1);
+                if (value != null) {
+                    result.add(value.trim());
+                }
+            }
+        }
+        return result;
+    }
+
     public static Map<String, Object> parameters() {
         return new HashMap<>();
     }

@@ -11,12 +11,15 @@ import org.traccar.session.cache.CacheManager;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Heart of the compatibility layer. Every decoded position goes through
@@ -30,6 +33,7 @@ public class LexusService {
 
     public static final String QUERY_INSERT_POSITION = "lexus.insertPosition";
     public static final String QUERY_SOCKET_DEVICE = "lexus.selectSocketDevice";
+    public static final String QUERY_SELECT_DEVICES = "lexus.selectDevices";
 
     /** Receives the positions of one device, in legacy form. */
     public interface Listener {
@@ -47,6 +51,10 @@ public class LexusService {
     private final Map<String, LexusLegacy.View> lastViews = new ConcurrentHashMap<>();
     private final Map<String, Set<Listener>> listeners = new ConcurrentHashMap<>();
     private final ExecutorService[] writers;
+
+    /** Legacy ids known to OpenGTS (lexus.selectDevices); null until the first load succeeds. */
+    private volatile Set<String> knownDevices;
+    private final Set<String> skippedDevices = ConcurrentHashMap.newKeySet();
 
     @Inject
     public LexusService(
@@ -68,6 +76,52 @@ public class LexusService {
                 return thread;
             });
         }
+
+        if (database.hasQuery(QUERY_SELECT_DEVICES)) {
+            int period = Math.max(10, config.getInteger("lexus.selectDevices.refresh", 60));
+            ScheduledExecutorService refresher = Executors.newSingleThreadScheduledExecutor(runnable -> {
+                Thread thread = new Thread(runnable, "lexus-devices");
+                thread.setDaemon(true);
+                return thread;
+            });
+            refresher.scheduleWithFixedDelay(this::refreshDevices, 0, period, TimeUnit.SECONDS);
+        }
+    }
+
+    private void refreshDevices() {
+        try {
+            Set<String> devices = new HashSet<>(
+                    database.selectColumn(QUERY_SELECT_DEVICES, LexusDatabase.parameters()));
+            if (knownDevices == null) {
+                LOGGER.info("Lexus: {} devices loaded from OpenGTS", devices.size());
+            }
+            knownDevices = devices;
+            skippedDevices.removeIf(devices::contains);
+        } catch (Exception e) {
+            LOGGER.warn("Lexus device list refresh failed: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Like the 3.2 fork, which only knew the devices of gts.Device: a tracker
+     * missing from OpenGTS is kept by Traccar but never sent to insertPosition
+     * (its @accountID would be NULL, or left over from another vehicle on the
+     * pooled connection). Without lexus.selectDevices every device is sent.
+     */
+    private boolean isKnown(String device) {
+        if (!database.hasQuery(QUERY_SELECT_DEVICES)) {
+            return true;
+        }
+        Set<String> devices = knownDevices;
+        if (devices != null && devices.contains(device)) {
+            return true;
+        }
+        if (skippedDevices.add(device)) {
+            LOGGER.info(devices == null
+                    ? "Lexus: device list not loaded yet, position of {} not sent to OpenGTS"
+                    : "Lexus: {} is not in OpenGTS, its positions are not sent there", device);
+        }
+        return false;
     }
 
     public boolean isEnabled() {
@@ -132,7 +186,7 @@ public class LexusService {
         }
         views.remove(position);
 
-        if (database.hasQuery(QUERY_INSERT_POSITION)) {
+        if (database.hasQuery(QUERY_INSERT_POSITION) && isKnown(view.device())) {
             int index = (int) Math.floorMod(position.getDeviceId(), (long) writers.length);
             writers[index].execute(() -> insert(view));
         }

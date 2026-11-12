@@ -88,6 +88,14 @@
         COMMIT;
     </entry>
 
+    <!-- boitiers connus d'OpenGTS (1re colonne = meme valeur que :device_id). Comme en 3.2,
+         les positions des autres boitiers restent dans Traccar mais ne passent jamais par
+         insertPosition (sinon @accountID est NULL : "syntax error near 'NULL'").
+         Liste rechargee toutes les lexus.selectDevices.refresh secondes (60 par defaut). -->
+    <entry key='lexus.selectDevices'>
+        SELECT imeiNumber FROM Device WHERE imeiNumber IS NOT NULL AND imeiNumber != ''
+    </entry>
+
     <!-- socket de l'application mobile : ws://serveur:8082/api/lexus/socket -->
     <entry key='lexus.socket.enable'>true</entry>
     <entry key='lexus.selectSocketDevice'>
