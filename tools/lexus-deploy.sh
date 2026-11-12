@@ -30,7 +30,18 @@ fi
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
 trap 'rm -f ~/.ssh/id_deploy' EXIT
 # la cle n'est jamais affichee dans les journaux
-( umask 077; echo "$SSH_PRIVATE_KEY" | base64 -d > ~/.ssh/id_deploy )
+# le secret peut contenir la cle telle quelle ou encodee en base64
+(
+    umask 077
+    case "$SSH_PRIVATE_KEY" in
+        *"-----BEGIN"*) printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/id_deploy ;;
+        *) printf '%s' "$SSH_PRIVATE_KEY" | tr -d ' \r\n\t' | base64 -d > ~/.ssh/id_deploy ;;
+    esac
+) || { echo "SSH_PRIVATE_KEY illisible : ni une cle privee, ni du base64 valide."; exit 1; }
+if ! ssh-keygen -y -f ~/.ssh/id_deploy >/dev/null 2>&1; then
+    echo "SSH_PRIVATE_KEY ne contient pas une cle privee SSH utilisable (cle incomplete ou protegee par mot de passe)."
+    exit 1
+fi
 ssh-keyscan -p "$PORT" "$IP" >> ~/.ssh/known_hosts 2>/dev/null
 
 SSH=(ssh -i ~/.ssh/id_deploy -p "$PORT" "$USER_NAME@$IP")
