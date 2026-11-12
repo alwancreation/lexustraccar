@@ -17,6 +17,8 @@ package org.traccar.web;
 
 import com.google.inject.servlet.ServletModule;
 import org.traccar.api.AsyncSocketServlet;
+import org.traccar.lexus.LexusApiServlet;
+import org.traccar.lexus.LexusSocketServlet;
 
 public class WebModule extends ServletModule {
 
@@ -25,5 +27,8 @@ public class WebModule extends ServletModule {
         filter("/*").through(OverrideTextFilter.class);
         serve("/.well-known/*").with(WellKnownServlet.class);
         serve("/api/socket").with(AsyncSocketServlet.class);
+        // Lexus compatibility layer (inactive unless lexus.enable is set)
+        serve("/api/lexus/socket").with(LexusSocketServlet.class);
+        serve("/api/status/*", "/api/command/*").with(LexusApiServlet.class);
     }
 }

@@ -57,6 +57,8 @@ import org.traccar.handler.events.OverspeedEventHandler;
 import org.traccar.handler.events.ProximityEventHandler;
 import org.traccar.handler.network.AcknowledgementHandler;
 import org.traccar.helper.PositionLogger;
+import org.traccar.lexus.LexusAcceptedHandler;
+import org.traccar.lexus.LexusDecodedHandler;
 import org.traccar.model.Position;
 import org.traccar.session.cache.CacheManager;
 
@@ -106,6 +108,7 @@ public class ProcessingHandler extends ChannelInboundHandlerAdapter implements B
                 GeolocationHandler.class,
                 HemisphereHandler.class,
                 MapMatcherHandler.class,
+                LexusDecodedHandler.class,
                 DistanceHandler.class,
                 FilterHandler.class,
                 GeofenceHandler.class,
@@ -118,6 +121,7 @@ public class ProcessingHandler extends ChannelInboundHandlerAdapter implements B
                 CopyAttributesHandler.class,
                 EngineHoursHandler.class,
                 PositionForwardingHandler.class,
+                LexusAcceptedHandler.class,
                 DatabaseHandler.class)
                 .map((clazz) -> (BasePositionHandler) injector.getInstance(clazz))
                 .filter(Objects::nonNull)

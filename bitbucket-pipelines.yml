@@ -1,0 +1,65 @@
+# Traccar 6 + couche Lexus : construction et deploiement.
+#
+# Rien ne se deploie tout seul. Chaque serveur se lance a la main :
+#   Bitbucket > Pipelines > Run pipeline > branche > deploy_s1 (ou s2, s5, s6)
+#
+# Variables du depot (Repository settings > Repository variables) :
+#   SSH_PRIVATE_KEY                      cle privee encodee en base64, "Secured"
+#   SERVER_<n>_IP / _PORT / _USER        pour n = 1, 2, 5, 6
+#
+# Avant le premier deploiement sur un serveur : Java 21, la nouvelle
+# configuration (setup/lexus.xml) et la base propre a Traccar doivent etre
+# en place. Le script refuse de deployer si Java 21 n'est pas trouve.
+
+image: eclipse-temurin:21-jdk
+
+definitions:
+  steps:
+    - step: &build
+        name: Build Traccar
+        caches:
+          - gradle
+        script:
+          - ./gradlew assemble --no-daemon --console=plain
+          # le jar seul ne suffit plus : il lui faut lib/ et schema/
+          - tar -czf target/traccar-release.tar.gz -C target tracker-server.jar lib -C .. schema
+        artifacts:
+          - target/traccar-release.tar.gz
+
+pipelines:
+  # construction seule a chaque push, pour voir tout de suite une erreur de compilation
+  default:
+    - step: *build
+
+  custom:
+    deploy_s1:
+      - step: *build
+      - step:
+          name: Deploy S1
+          deployment: production
+          script:
+            - bash tools/lexus-deploy.sh 1 /home/app/traccar
+
+    deploy_s2:
+      - step: *build
+      - step:
+          name: Deploy S2
+          deployment: production
+          script:
+            - bash tools/lexus-deploy.sh 2 /opt/traccar
+
+    deploy_s5:
+      - step: *build
+      - step:
+          name: Deploy S5
+          deployment: production
+          script:
+            - bash tools/lexus-deploy.sh 5 /home/app/traccar
+
+    deploy_s6:
+      - step: *build
+      - step:
+          name: Deploy S6
+          deployment: production
+          script:
+            - bash tools/lexus-deploy.sh 6 /home/app/traccar

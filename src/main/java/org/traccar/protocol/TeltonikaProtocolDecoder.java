@@ -35,6 +35,7 @@ import org.traccar.session.DeviceSession;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.LinkedList;
@@ -329,6 +330,9 @@ public class TeltonikaProtocolDecoder extends BaseProtocolDecoder {
         for (var entry : PARAMETERS.getOrDefault(id, Map.of()).entrySet()) {
             if (entry.getKey().test(model)) {
                 entry.getValue().accept(position, buf);
+                buf.readerIndex(index);
+                // Lexus: keep the raw value under its io id next to the decoded name
+                position.set(Position.PREFIX_IO + id, readValue(buf, length));
                 buf.readerIndex(index + length);
                 return;
             }
@@ -682,6 +686,10 @@ public class TeltonikaProtocolDecoder extends BaseProtocolDecoder {
             }
             channel.writeAndFlush(new NetworkMessage(response, remoteAddress));
         }
+
+        // Lexus: devices send a packet newest record first by default ("Sort by: Newest");
+        // process it in chronological order so the last position published is the latest one
+        positions.sort(Comparator.comparing(Position::getFixTime, Comparator.nullsFirst(Comparator.naturalOrder())));
 
         return positions.isEmpty() ? null : positions;
     }

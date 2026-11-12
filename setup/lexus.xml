@@ -1,0 +1,81 @@
+<?xml version='1.0' encoding='UTF-8'?>
+
+<!DOCTYPE properties SYSTEM 'http://java.sun.com/dtd/properties.dtd'>
+
+<!--
+    Lexus compatibility layer: entries to add to conf/traccar.xml.
+
+    Traccar 6 keeps its own database (devices, positions, users). Create an
+    empty MySQL schema for it, or use the embedded H2 file. The OpenGTS
+    database is reached through the second connection below, with the SQL
+    you already had in the 3.2 configuration.
+-->
+<properties>
+
+    <!-- Traccar's own database -->
+    <entry key='database.driver'>com.mysql.cj.jdbc.Driver</entry>
+    <entry key='database.url'>jdbc:mysql://localhost:3306/traccar?zeroDateTimeBehavior=round&amp;serverTimezone=UTC&amp;allowPublicKeyRetrieval=true&amp;useSSL=false&amp;allowMultiQueries=true&amp;autoReconnect=true&amp;useUnicode=yes&amp;characterEncoding=UTF-8&amp;sessionVariables=sql_mode=''</entry>
+    <entry key='database.user'>[USER]</entry>
+    <entry key='database.password'>[PASSWORD]</entry>
+
+    <!-- A tracker is accepted on first contact when its id looks like an IMEI.
+         (The 3.2 fork read the list from the OpenGTS Device table.) -->
+    <entry key='database.registerUnknown'>true</entry>
+    <entry key='database.registerUnknown.regex'>\d{5,20}</entry>
+
+    <!-- ports: keep the ones the trackers already use -->
+    <entry key='gps103.port'>5001</entry>
+    <entry key='gt06.port'>5023</entry>
+    <entry key='teltonika.port'>5027</entry>
+    <entry key='web.port'>8082</entry>
+
+    <!-- LEXUS LAYER -->
+
+    <entry key='lexus.enable'>true</entry>
+
+    <!-- '1' if the old selectDevicesAll was CONCAT('1', imeiNumber) AS id, empty if it was imeiNumber AS id.
+         It is what :deviceId holds in the queries, "Device" in the notification files
+         and the deviceId expected by /api/command/send. -->
+    <entry key='lexus.deviceIdPrefix'>1</entry>
+
+    <!-- OpenGTS database: old database.url / user / password -->
+    <entry key='lexus.database.driver'>com.mysql.cj.jdbc.Driver</entry>
+    <entry key='lexus.database.url'>jdbc:mysql://localhost:3306/gts?allowMultiQueries=true&amp;useSSL=false&amp;allowPublicKeyRetrieval=true</entry>
+    <entry key='lexus.database.user'>[USER]</entry>
+    <entry key='lexus.database.password'>[PASSWORD]</entry>
+
+    <!-- old database.insertPosition, unchanged. Same parameters as before:
+         :deviceId :time :latitude :longitude :altitude :speed (knots) :course :address :valid
+         :protocol :attributes :statusignition :extended_info :other -->
+    <entry key='lexus.insertPosition'>
+        [PASTE THE OLD database.insertPosition HERE]
+    </entry>
+
+    <!-- live socket for the mobile application: ws://server:8082/api/lexus/socket
+         (old database.selectSocketDevice; it must return the IMEI in a column named uniqueId) -->
+    <entry key='lexus.socket.enable'>true</entry>
+    <entry key='lexus.selectSocketDevice'>
+        SELECT d.imeiNumber AS uniqueId
+        FROM Device d
+        INNER JOIN Account a ON a.accountID = d.accountID
+        LEFT JOIN User u ON u.accountID = d.accountID AND u.userID = :user
+        WHERE d.accountID = :account AND d.deviceID = :device AND d.imeiNumber REGEXP '^[0-9]+$'
+        AND (u.password = :password OR ((:user = '' OR :user = 'admin') AND a.password = :password))
+        LIMIT 1;
+    </entry>
+
+    <!-- optional: shared secret for POST /api/command/send (header X-Lexus-Token).
+         Without it the endpoint is open to anybody, as it was in the 3.2 fork. -->
+    <!--<entry key='lexus.command.token'>[SECRET]</entry>-->
+
+    <!-- notification files: same keys as in the 3.2 configuration -->
+    <entry key='notification.enable'>true</entry>
+    <entry key='notification.async'>true</entry>
+    <entry key='notification.log'>false</entry>
+    <entry key='notification.enableCMD'>false</entry>
+    <entry key='notification.CMD'>/usr/bin/php7.3 /home/www/lexus-gts/web/notification/alarms.php</entry>
+    <entry key='notification.url'>http://127.0.0.1/notification/alarms.php?data=</entry>
+    <entry key='notification.coban.url'>http://127.0.0.1/notification/alarms.coban.php?data=</entry>
+    <entry key='notification-folder'>/home/events/</entry>
+
+</properties>
